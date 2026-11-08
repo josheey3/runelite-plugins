@@ -1,0 +1,23 @@
+# reference checkouts (scripts/update-ref.ps1)
+/_ref/
+
+# gradle / build output
+.gradle/
+build/
+out/
+*.class
+*.tmp
+
+# IDEs
+.idea/
+*.iml
+.project
+.settings/
+.classpath
+.vscode/
+nbactions.xml
+nb-configuration.xml
+nbproject/
+
+# Claude Code local settings
+.claude/settings.local.json
