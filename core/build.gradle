@@ -1,0 +1,9 @@
+// Shared code for plugins in plugins/*. Compiled against runelite-client like a plugin.
+// It is bundled into every plugin's jar (root build.gradle), and scripts/export-plugin.ps1
+// copies the classes a plugin uses into its standalone Plugin Hub repo, relocated under the
+// plugin's own package.
+//
+// Rules: everything here must follow the same Plugin Hub rules as plugin code, must not be a
+// Plugin itself, and must not keep global/static state (several plugins may load it at once).
+
+group = 'com.josheey3'

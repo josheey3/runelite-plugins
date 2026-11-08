@@ -1,0 +1,92 @@
+// Shared build logic for core/ and every plugin under plugins/.
+// Keep dependencies identical to the standalone template (no Lombok in tests, for example) so
+// anything that builds here also builds after export.
+// Mirrors runelite/example-plugin's build.gradle so plugins export cleanly to standalone
+// Plugin Hub repositories (see scripts/export-plugin.ps1).
+
+def runeLiteVersion = 'latest.release'
+
+subprojects {
+	apply plugin: 'java'
+
+	repositories {
+		mavenLocal()
+		maven {
+			url = 'https://repo.runelite.net'
+			content {
+				includeGroupByRegex("net\\.runelite.*")
+			}
+		}
+		mavenCentral()
+	}
+
+	dependencies {
+		compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
+
+		compileOnly 'org.projectlombok:lombok:1.18.30'
+		annotationProcessor 'org.projectlombok:lombok:1.18.30'
+
+		testImplementation 'junit:junit:4.12'
+		testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
+		testImplementation group: 'net.runelite', name: 'jshell', version: runeLiteVersion
+	}
+
+	tasks.withType(JavaCompile).configureEach {
+		options.encoding = 'UTF-8'
+		options.release.set(11)
+	}
+}
+
+// Plugin projects: depend on core, bundle core's classes into the plugin jar, and get the
+// `run` (dev client) and `shadowJar` (standalone fat jar) tasks from the example-plugin template.
+configure(subprojects.findAll { it.projectDir.parentFile.name == 'plugins' }) {
+	evaluationDependsOn(':core')
+
+	dependencies {
+		implementation project(':core')
+	}
+
+	// Set in each plugin's build.gradle: ext.pluginMainClass = 'com.x.MyPluginTest'
+	def mainClassName = provider { project.findProperty('pluginMainClass') as String }
+
+	tasks.named('jar', Jar) {
+		dependsOn ':core:classes'
+		from project(':core').sourceSets.main.output
+	}
+
+	tasks.register('run', JavaExec) {
+		group = 'application'
+		description = 'Launches a RuneLite developer client with this plugin loaded.'
+		classpath = sourceSets.test.runtimeClasspath
+		mainClass = mainClassName
+
+		jvmArgs "-ea"
+		args "--developer-mode", "--debug"
+	}
+
+	tasks.register('shadowJar', Jar) {
+		dependsOn configurations.testRuntimeClasspath
+		manifest {
+			attributes('Main-Class': mainClassName, 'Multi-Release': true)
+		}
+
+		duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+		from sourceSets.main.output
+		from sourceSets.test.output
+		from {
+			configurations.testRuntimeClasspath.collect { file ->
+				file.isDirectory() ? file : zipTree(file)
+			}
+		}
+
+		exclude 'META-INF/INDEX.LIST'
+		exclude 'META-INF/*.SF'
+		exclude 'META-INF/*.DSA'
+		exclude 'META-INF/*.RSA'
+		exclude '**/module-info.class'
+
+		group = BasePlugin.BUILD_GROUP
+		archiveClassifier.set('shadow')
+		archiveFileName.set("${project.name}-all.jar")
+	}
+}

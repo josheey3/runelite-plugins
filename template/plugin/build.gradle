@@ -1,0 +1,10 @@
+// Shared build settings (RuneLite deps, Java 11, core/, run + shadowJar tasks) live in the
+// root build.gradle. Only plugin-specific settings belong here.
+
+group = '__PACKAGE__'
+ext.pluginMainClass = '__PACKAGE__.__Class__PluginTest'
+
+dependencies {
+	// Plugin-specific dependencies only. Don't add anything runelite-client already provides
+	// (Guava, Gson, OkHttp, Guice...). New third-party libraries slow down Plugin Hub review.
+}

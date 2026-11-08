@@ -19,7 +19,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$template = Join-Path $root "template"
+$template = Join-Path $root "template\plugin"
 
 # Workspace defaults (author, basePackage) live in workspace.properties at the repo root.
 $props = @{}
@@ -71,7 +71,7 @@ $tokens = [ordered]@{
 }
 $utf8 = New-Object System.Text.UTF8Encoding $false
 $textExt = @(".java", ".gradle", ".properties", ".xml", ".md", "")
-Get-ChildItem -Recurse -File $dest | Where-Object { $textExt -contains $_.Extension -and $_.Name -notlike "gradlew*" -and $_.Name -ne ".gitignore" } | ForEach-Object {
+Get-ChildItem -Recurse -File $dest | Where-Object { $textExt -contains $_.Extension } | ForEach-Object {
 	$text = [System.IO.File]::ReadAllText($_.FullName)
 	$orig = $text
 	foreach ($k in $tokens.Keys) { $text = $text.Replace($k, $tokens[$k]) }
@@ -82,13 +82,9 @@ Get-ChildItem -Recurse -File $dest | Where-Object { $textExt -contains $_.Extens
 $left = Get-ChildItem -Recurse -File $dest | Where-Object { $textExt -contains $_.Extension } | Select-String -Pattern '__[A-Za-z]+__'
 if ($left) { Write-Warning "Unreplaced tokens remain:"; $left | ForEach-Object { Write-Warning "  $($_.Path):$($_.LineNumber)" } }
 
-# Git on Windows can't see the executable bit; the Plugin Hub builds on Linux and needs it.
-git -C $root rev-parse --is-inside-work-tree 2>$null | Out-Null
-if ($LASTEXITCODE -eq 0) { git -C $root add --chmod=+x "plugins/$Id/gradlew" }
-
-Write-Host "Created plugins/$Id"
+Write-Host "Created plugins/$Id (Gradle project :$Id, picked up automatically by settings.gradle)"
 Write-Host "  package : $Package"
 Write-Host "  classes : ${class}Plugin, ${class}Config, ${class}PluginTest"
 Write-Host "  config  : group '$Id'"
 Write-Host ""
-Write-Host "Next: cd plugins/$Id; ./gradlew build; ./gradlew run"
+Write-Host "Next (from the repo root): ./gradlew :${Id}:build; ./gradlew :${Id}:run"

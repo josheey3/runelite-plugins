@@ -1,0 +1,14 @@
+rootProject.name = 'runelite-plugins'
+
+// Shared library code used by plugins (bundled into each plugin jar).
+include 'core'
+
+// Every folder under plugins/ with a build.gradle is a subproject named after the folder,
+// e.g. plugins/panel-popout -> :panel-popout. No need to edit this file when adding plugins.
+file('plugins').eachDir { dir ->
+	if (new File(dir, 'build.gradle').exists())
+	{
+		include ":${dir.name}"
+		project(":${dir.name}").projectDir = dir
+	}
+}
