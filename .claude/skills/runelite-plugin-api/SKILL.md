@@ -110,9 +110,9 @@ clientToolbar.addNavigation(navButton);               // shutDown: clientToolbar
   hidden.
 - Use `ColorScheme` colours and `FontManager` fonts so the panel matches the client theme.
 - `NavigationButton.popup(Map<String, Runnable>)` adds right-click menu items to the sidebar tab.
-- To work with *other* plugins' sidebar tabs (there's no API), use `core`'s `ClientSidebar`.
-  See `plugins/panel-popout` for the safe way to change tabs without breaking RuneLite's
-  index-based tab-to-plugin mapping.
+- Changing RuneLite's sidebar or other plugins' panels is a **rejected Plugin Hub category**
+  (`docs/plugin-hub-rules.md`). Only personal-only plugins may do it, via `core`'s `ClientSidebar`;
+  see `plugins/panel-popout` for how to do it without breaking RuneLite's index-based mapping.
 - Load images with `ImageUtil.loadImageResource(getClass(), "file.png")`, and put files in
   `src/main/resources/<package path>/`.
 

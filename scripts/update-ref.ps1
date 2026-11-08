@@ -1,15 +1,25 @@
 <#
 .SYNOPSIS
   Clone or refresh the read-only reference checkouts in _ref/ (git-ignored):
-  runelite/runelite (client + API source) and runelite/example-plugin (plugin template).
+  runelite/runelite (client + API source), runelite/example-plugin (plugin template),
+  runelite/runelite.wiki (hub rules: Rejected-or-Rolled-Back-Features.md, Plugin-Hub-Review.md),
+  runelite/plugin-hub (manifests of every hub plugin) and runelite/plugin-hub-tooling (the packager's checks).
 #>
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $ref = Join-Path $root "_ref"
 New-Item -ItemType Directory -Force $ref | Out-Null
 
-foreach ($repo in @("runelite", "example-plugin")) {
-	$dir = Join-Path $ref $repo
+$repos = [ordered]@{
+	"runelite" = "runelite"
+	"example-plugin" = "example-plugin"
+	"wiki" = "runelite.wiki"
+	"plugin-hub" = "plugin-hub"
+	"plugin-hub-tooling" = "plugin-hub-tooling"
+}
+foreach ($name in $repos.Keys) {
+	$repo = $repos[$name]
+	$dir = Join-Path $ref $name
 	if (Test-Path (Join-Path $dir ".git")) {
 		Write-Host "Updating $repo"
 		git -C $dir fetch --depth 1 origin

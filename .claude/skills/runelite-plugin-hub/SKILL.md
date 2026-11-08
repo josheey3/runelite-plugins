@@ -12,8 +12,15 @@ exported repository is only a publishing target.
 
 ## 1. Pre-flight review
 
-Check the plugin against `docs/runelite-agent-guidelines.md`: rules, forbidden features, threading,
-config. Specifically:
+First confirm the plugin passed the feasibility gate in the `runelite-hub-acceptance` skill. A plugin
+marked "Not eligible" there (for example `panel-popout`) must not be submitted. Then run:
+
+```bash
+pwsh -NoProfile -File scripts/hub-check.ps1 -Id <id> -Build
+```
+
+It must report 0 errors. Then check the plugin by hand against `docs/plugin-hub-rules.md` and
+`docs/runelite-agent-guidelines.md`. Specifically:
 - Nothing left from the template: `com.example`, `Example*`, the greeter config item.
 - No reflection, JNI/JNA, `Process`/`ProcessBuilder`, dynamic class loading, Java serialization.
 - Third-party server features are opt-in, with the standard `warning`.
@@ -24,10 +31,11 @@ config. Specifically:
 - New third-party dependencies need hub dependency verification and slow review down a lot, so
   avoid them.
 
-Reviewers reject what they can't easily confirm is within the rules: "If it is difficult for us to
-ensure the plugin isn't against the rules we will not merge it". Plugins that change core client UI
-or reach into other plugins (Panel Popout does both) get extra scrutiny, so tell the user that
-acceptance isn't guaranteed.
+Reviewers (humans plus an automated review bot since April 2026) reject what they can't easily
+confirm is within the rules: "if we cannot review every single line of source code that your plugin
+will execute, we will not accept it". Plugins that change RuneLite's own UI or reach into other
+plugins are a rejected category (see `docs/plugin-hub-rules.md`, Precedent). Accepted plugins can
+still be disabled later.
 
 ## 2. Export
 
@@ -38,14 +46,15 @@ pwsh -NoProfile -File scripts/export-plugin.ps1 -Id <id> -Build
 This writes `build/export/<id>/` (git-ignored): the plugin's files, the upstream
 `build.gradle`/`settings.gradle`, the Gradle wrapper, `.gitattributes`, and the core classes the
 plugin uses, relocated to `<pluginPackage>.core`. `-Build` runs the standalone build to prove it
-compiles the way the hub will build it. Fix any warning about plugin-specific dependencies by
+compiles the way the hub will build it. Dev-only `*SelfTest*.java` files are dropped and
+`<Class>PluginTest` is regenerated from the template, so reviewers only see plugin code. Fix any warning about plugin-specific dependencies by
 adding them to the exported `build.gradle`.
 
 ## 3. Push the standalone repository
 
 Pushing creates public code, so confirm with the user first. The publishing repository is
-`josheey3/<id>` and must be **public**. Use the `josheey3` token as in `CLAUDE.md` (Git section),
-never the machine's default account.
+`josheey3/<id>` and must be **public**. Push as described in `CLAUDE.local.md`,
+never with the machine's default account.
 
 ```bash
 cd build/export/<id>

@@ -11,6 +11,9 @@ registering.
 
 ## Steps
 
+0. **Feasibility gate first.** Run the `runelite-hub-acceptance` checklist on the idea
+   (rules, rejected categories, existing hub plugins). Don't scaffold anything that the Plugin Hub
+   won't accept unless the user explicitly chooses a personal-only plugin.
 1. Choose:
    - **Name**: display name, may contain spaces, e.g. `Helmet Check`.
    - **Description**: one line shown in the plugin list and on the Plugin Hub.
@@ -31,8 +34,10 @@ registering.
 5. Before writing a helper, check `core/` (see the `runelite-shared-core` skill). Shared code goes
    there, not in the plugin.
 6. Update `README.md`, `runelite-plugin.properties` (`description=`, `tags=`) and the plugins table
-   in the root `README.md`.
-7. Launch it for the user with the `runelite-run-client` skill and tell them what to test.
+   in the root `README.md` (including its Hub status), and the status table in the
+   `runelite-hub-acceptance` skill.
+7. Run `pwsh -File scripts/hub-check.ps1 -Id <id>` and fix every error before committing.
+8. Launch it for the user with the `runelite-run-client` skill and tell them what to test.
 
 ## What the template contains
 

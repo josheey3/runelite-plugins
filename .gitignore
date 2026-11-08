@@ -21,3 +21,6 @@ nbproject/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# machine-specific Claude notes
+CLAUDE.local.md

@@ -15,7 +15,7 @@ Code that's useful to more than one plugin and has nothing plugin-specific in it
 
 | Package | Contents today |
 |---|---|
-| `com.josheey3.core.ui` | `ClientSidebar` (find the RuneLite sidebar and its tabs' `PluginPanel`s), `WindowBounds` (persistable, monitor-safe window bounds), `Icons` (Java2D-drawn toolbar icons) |
+| `com.josheey3.core.ui` | `WindowBounds` (persistable, monitor-safe window bounds), `Icons` (Java2D-drawn toolbar icons), `ClientSidebar` (find the RuneLite sidebar and its tabs' `PluginPanel`s; **personal-only plugins**, since using it to change the sidebar is a rejected hub category) |
 | `com.josheey3.core.config` | `JsonConfig` (store structured state as JSON in a config key) |
 
 Before adding a helper to a plugin, check whether core already has it. When a second plugin needs
@@ -23,8 +23,10 @@ something that lives in a plugin, move it to core in its own commit, then use it
 
 ## Rules
 
-- **Same rules as plugin code**: all of `docs/runelite-agent-guidelines.md` applies, so no
-  reflection, Java 11, no blocking the client thread, and so on.
+- **Same rules as plugin code**: all of `docs/runelite-agent-guidelines.md` and
+  `docs/plugin-hub-rules.md` apply, so no reflection, Java 11, no blocking the client thread, and
+  so on. Anything in core ships inside hub plugins and gets reviewed with them.
+  `scripts/hub-check.ps1` scans the core classes each plugin ships.
 - **No `Plugin` classes, no `@ConfigGroup` interfaces, no `@Subscribe` handlers** in core. Core is
   helpers that plugins call.
 - **No static mutable state.** Several plugins can load core at once, and in the dev client they

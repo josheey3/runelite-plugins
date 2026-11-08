@@ -56,8 +56,19 @@ Get-ChildItem -Force $src | Where-Object { @("build", ".gradle", "build.gradle",
 	Copy-Item -Recurse $_.FullName (Join-Path $OutDir $_.Name)
 }
 
-# 2. Standalone build files + wrapper.
+# Dev-only test harnesses (*SelfTest*.java) never ship: reviewers should only see plugin code.
+# The launcher is regenerated from the template so it can't reference them.
 $tokens = @{ "__PACKAGE__" = $pluginPackage; "__Class__" = $class; "__ID__" = $Id }
+Get-ChildItem -Recurse -File -Filter "*SelfTest*.java" (Join-Path $OutDir "src") -ErrorAction SilentlyContinue | ForEach-Object {
+	Write-Host "  dropping dev-only $($_.Name)"
+	Remove-Item $_.FullName
+}
+$launcherTemplate = [System.IO.File]::ReadAllText((Join-Path $root "template\plugin\src\test\java\__package__\__Class__PluginTest.java"))
+foreach ($k in $tokens.Keys) { $launcherTemplate = $launcherTemplate.Replace($k, $tokens[$k]) }
+$launcher = Join-Path $OutDir ("src\test\java\" + ($pluginPackage -replace '\.', '\') + "\${class}PluginTest.java")
+[System.IO.File]::WriteAllText($launcher, $launcherTemplate, $utf8)
+
+# 2. Standalone build files + wrapper.
 foreach ($f in @("build.gradle", "settings.gradle", ".gitignore")) {
 	$text = [System.IO.File]::ReadAllText((Join-Path $root "template\standalone\$f"))
 	foreach ($k in $tokens.Keys) { $text = $text.Replace($k, $tokens[$k]) }

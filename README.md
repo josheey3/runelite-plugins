@@ -5,9 +5,12 @@ and tooling to create, run and publish them.
 
 ## Plugins
 
-| Plugin | Description |
-|---|---|
-| [Panel Popout](plugins/panel-popout) | Pop sidebar panels into their own windows (e.g. a second monitor) and save layouts as presets |
+| Plugin | Description | Plugin Hub |
+|---|---|---|
+| [Panel Popout](plugins/panel-popout) | Pop sidebar panels into their own windows (e.g. a second monitor) and save layouts as presets | Not eligible ([why](docs/plugin-hub-rules.md#precedent)); use `runClient` |
+
+Plugins aim for the [Plugin Hub](https://runelite.net/plugin-hub) by default. See
+[docs/plugin-hub-rules.md](docs/plugin-hub-rules.md) and run `scripts/hub-check.ps1` before submitting.
 
 ## Requirements
 
@@ -27,12 +30,15 @@ pwsh -File scripts/update-ref.ps1
 # launch a dev client with one plugin
 ./gradlew :panel-popout:run
 
+# everyday client: RuneLite with every plugin in this repo loaded
+./gradlew runClient
+
 # new plugin
 pwsh -File scripts/new-plugin.ps1 -Name "Helmet Check" -Description "Warns when your head slot is empty"
 ./gradlew :helmet-check:run
 ```
 
-To log in to the dev client, open its **Jagex Accounts** sidebar panel → **Add Jagex Account**.
+To log in to a dev client, open its **Jagex Accounts** sidebar panel → **Add Jagex Account**.
 The fallback is the `--insecure-write-credentials` method on the
 [RuneLite wiki](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts).
 
@@ -41,10 +47,12 @@ The fallback is the `--insecure-write-credentials` method on the
 ```
 build.gradle, settings.gradle   shared build; every plugins/* folder is included automatically
 core/                           shared library (com.josheey3.core), bundled into each plugin
+dev-client/                     ./gradlew runClient: RuneLite with every plugin loaded
 plugins/<id>/                   one plugin per folder
 template/plugin/                skeleton used by scripts/new-plugin.ps1
 template/standalone/            upstream example-plugin build files, used for hub export
-scripts/                        new-plugin, export-plugin, update-ref
+scripts/                        new-plugin, hub-check, export-plugin, update-ref
+docs/                           Plugin Hub rules, RuneLite agent guidelines
 .claude/skills/, CLAUDE.md      instructions for Claude Code
 ```
 
@@ -54,7 +62,8 @@ The hub builds each plugin from its own repository, so publishing exports one pl
 `core` classes it uses copied in and relocated:
 
 ```bash
-pwsh -File scripts/export-plugin.ps1 -Id panel-popout -Build   # -> build/export/panel-popout
+pwsh -File scripts/hub-check.ps1 -Id <id> -Build         # rules check + standalone hub build
+pwsh -File scripts/export-plugin.ps1 -Id <id> -Build     # -> build/export/<id>
 ```
 
 See [.claude/skills/runelite-plugin-hub/SKILL.md](.claude/skills/runelite-plugin-hub/SKILL.md) for

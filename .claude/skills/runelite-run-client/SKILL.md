@@ -14,6 +14,7 @@ Run everything from the repository root with the root Gradle wrapper (`./gradlew
 | Compile + unit tests, everything | `./gradlew build` |
 | One plugin | `./gradlew :<id>:build` |
 | Launch dev client with a plugin | `./gradlew :<id>:run` (runs `<Class>PluginTest.main` with `--developer-mode --debug`, assertions on) |
+| Everyday client with **all** plugins | `./gradlew runClient` (`dev-client/`: launcher generated from every `plugins=` line; developer mode, no `--debug`) |
 | Plugin jar for sideloading (includes core) | `./gradlew :<id>:jar` → `plugins/<id>/build/libs/<id>.jar` |
 | Fat jar that runs RuneLite + plugin | `./gradlew :<id>:shadowJar` → `plugins/<id>/build/libs/<id>-all.jar` |
 | Refresh the RuneLite version | `./gradlew build --refresh-dependencies` (`latest.release` is cached for 24h) |
@@ -32,8 +33,10 @@ The dev client:
 - can run next to their normal RuneLite. Expect harmless noise: `BindException: Address already in
   use` from plugins, and a `ReflectUtil` `InaccessibleObjectException` at DEBUG level on JDK 17.
 
-To stop it, close the window, or kill only the dev client's `java.exe` by matching its main class.
-**Never** kill `RuneLite.exe`: that is the user's own client.
+To stop it, close the window, or kill only the dev client's `java.exe` by matching its main class
+(`devclient.DevClient` for `runClient`). The user may have their own dev client open with the same
+main class, so record the PID you started and kill only that. **Never** kill `RuneLite.exe`: that
+is the user's own client.
 
 ```powershell
 Get-CimInstance Win32_Process -Filter "Name='java.exe'" | Where-Object { $_.CommandLine -match 'HelmetCheckPluginTest' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
