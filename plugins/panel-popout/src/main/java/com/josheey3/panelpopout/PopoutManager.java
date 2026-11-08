@@ -9,6 +9,7 @@ import com.josheey3.core.ui.Icons;
 import com.josheey3.core.ui.WindowBounds;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Frame;
 import java.awt.Rectangle;
 import java.awt.Window;
 import java.awt.event.ContainerEvent;
@@ -16,6 +17,8 @@ import java.awt.event.ContainerListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.awt.event.WindowEvent;
+import java.awt.event.WindowStateListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -54,6 +57,9 @@ import net.runelite.client.util.SwingUtil;
  * {@code onActivate}/{@code onDeactivate} ourselves when it leaves and returns.</li>
  * <li>When a plugin removes its panel while popped out, RuneLite's removal finds the placeholder
  * (see {@link PopoutPlaceholder#equals}) and we close the window from the container event.</li>
+ * <li>The Configuration panel can never be popped out, so plugin settings (including turning this
+ * plugin off) always stay reachable in the sidebar.</li>
+ * <li>Any unexpected error puts every panel back in the sidebar ({@link #safely}).</li>
  * </ul>
  * All methods must be called on the Swing EDT.
  */
@@ -67,6 +73,8 @@ class PopoutManager
 	private static final String POPPED_SUFFIX = " (popped out)";
 	private static final int ATTACH_RETRY_MS = 500;
 	private static final int ATTACH_MAX_TRIES = 120;
+	private static final String CONFIG_PANEL_CLASS = "net.runelite.client.plugins.config.TopLevelConfigPanel";
+	private static final String CONFIG_PANEL_NAME = "Configuration";
 
 	private final ConfigManager configManager;
 	private final PanelPopoutConfig config;
@@ -86,6 +94,8 @@ class PopoutManager
 	private Timer attachTimer;
 	@Nullable
 	private JButton sidebarButton;
+	@Nullable
+	private Frame clientFrame;
 	private int attachTries;
 	private boolean selfChange;
 
@@ -95,6 +105,7 @@ class PopoutManager
 		final Component content;
 		PopoutPlaceholder placeholder;
 		PopoutWindow window;
+		boolean minimizedWithClient;
 
 		Popout(String name, Component content)
 		{
@@ -157,9 +168,23 @@ class PopoutManager
 			removeSidebarButton();
 			sidebar = null;
 		}
+		if (clientFrame != null)
+		{
+			clientFrame.removeWindowStateListener(clientStateListener);
+			clientFrame = null;
+		}
 		saveTimer.stop();
 		save();
 		fireChanged();
+	}
+
+	/**
+	 * Writes window positions immediately (client shutting down).
+	 */
+	void saveNow()
+	{
+		saveTimer.stop();
+		save();
 	}
 
 	private boolean tryAttach()
@@ -185,6 +210,13 @@ class PopoutManager
 		sidebar.addMouseListener(mouseListener);
 		sidebar.addChangeListener(changeListener);
 		sidebar.addContainerListener(containerListener);
+		Window ancestor = SwingUtilities.getWindowAncestor(sidebar);
+		if (ancestor instanceof Frame)
+		{
+			// Only listened to, never changed: see the minimise-with-RuneLite option.
+			clientFrame = (Frame) ancestor;
+			clientFrame.addWindowStateListener(clientStateListener);
+		}
 		updateSidebarButton();
 		restoreRemembered();
 		fireChanged();
@@ -247,32 +279,60 @@ class PopoutManager
 		return byName(name) != null;
 	}
 
+	/**
+	 * @return names of sidebar panels that can be popped out right now, in sidebar order
+	 */
+	List<String> poppableNames()
+	{
+		List<String> names = new ArrayList<>();
+		if (sidebar != null)
+		{
+			for (int i = 0; i < sidebar.getTabCount(); i++)
+			{
+				if (canPopOut(i))
+				{
+					names.add(sidebar.getToolTipTextAt(i));
+				}
+			}
+		}
+		return names;
+	}
+
 	// ---- actions ---------------------------------------------------------------------------
 
 	void popOut(String name)
 	{
-		int index = indexOfName(name);
-		if (canPopOut(index))
+		safely("pop out " + name, () ->
 		{
-			popOut(index, null);
-		}
+			int index = indexOfName(name);
+			if (canPopOut(index))
+			{
+				popOut(index, null);
+			}
+		});
 	}
 
 	void popIn(String name, boolean openInSidebar)
 	{
-		Popout p = byName(name);
-		if (p != null)
+		safely("pop in " + name, () ->
 		{
-			dock(p, true, openInSidebar);
-		}
+			Popout p = byName(name);
+			if (p != null)
+			{
+				dock(p, true, openInSidebar);
+			}
+		});
 	}
 
 	void popInAll()
 	{
-		for (Popout p : new ArrayList<>(popouts))
+		safely("pop everything back in", () ->
 		{
-			dock(p, true, false);
-		}
+			for (Popout p : new ArrayList<>(popouts))
+			{
+				dock(p, true, false);
+			}
+		});
 	}
 
 	void show(String name)
@@ -291,6 +351,20 @@ class PopoutManager
 	 * @return names from the layout that aren't in the sidebar (plugin off or not installed)
 	 */
 	List<String> applyLayout(List<PopoutState> layout)
+	{
+		try
+		{
+			return doApplyLayout(layout);
+		}
+		catch (RuntimeException e)
+		{
+			log.warn("Panel Popout failed to apply a preset; putting all panels back in the sidebar", e);
+			restoreAllQuietly();
+			return Collections.emptyList();
+		}
+	}
+
+	private List<String> doApplyLayout(List<PopoutState> layout)
 	{
 		Set<String> wanted = new LinkedHashSet<>();
 		for (PopoutState s : layout)
@@ -377,9 +451,13 @@ class PopoutManager
 		}
 
 		Popout p = new Popout(name, content);
-		p.placeholder = new PopoutPlaceholder(content, name, () -> p.window.bringToFront(), () -> dock(p, true, true));
+		p.placeholder = new PopoutPlaceholder(content, name, () -> p.window.bringToFront(),
+			() -> safely("pop in " + name, () -> dock(p, true, true)));
 		boolean onTop = state != null ? state.isAlwaysOnTop() : config.alwaysOnTopByDefault();
-		p.window = new PopoutWindow(name, icon, onTop, () -> dock(p, true, true), () -> dock(p, true, false), this::scheduleSave);
+		p.window = new PopoutWindow(name, icon, onTop,
+			() -> safely("pop in " + name, () -> dock(p, true, true)),
+			() -> safely("close " + name, () -> dock(p, true, false)),
+			this::scheduleSave);
 
 		// Swap first: adding content to the window while it's still a tab would make Swing call
 		// sidebar.remove(content), which removes the whole tab.
@@ -392,6 +470,8 @@ class PopoutManager
 		{
 			selfChange = false;
 		}
+		// Tracked from here on, so a failure below can still put the panel back.
+		popouts.add(p);
 		sidebar.setEnabledAt(index, false);
 		sidebar.setToolTipTextAt(index, name + POPPED_SUFFIX);
 
@@ -401,7 +481,6 @@ class PopoutManager
 		p.window.setVisible(true);
 		SwingUtil.activate(ClientSidebar.findPluginPanel(content));
 
-		popouts.add(p);
 		remembered.put(name, capture(p));
 		updateSidebarButton();
 		scheduleSave();
@@ -533,36 +612,53 @@ class PopoutManager
 		@Override
 		public void mouseClicked(MouseEvent e)
 		{
-			if (sidebar == null)
-			{
-				return;
-			}
-			int index = sidebar.indexAtLocation(e.getX(), e.getY());
-			if (index < 0)
-			{
-				return;
-			}
-			if (SwingUtilities.isLeftMouseButton(e))
-			{
-				// Popped-out tabs are disabled; clicking one brings its window forward instead.
-				Popout p = popoutAt(index);
-				if (p != null)
-				{
-					p.window.bringToFront();
-				}
-			}
-			else if (SwingUtilities.isRightMouseButton(e))
-			{
-				Component tab = sidebar.getComponentAt(index);
-				int x = e.getX();
-				int y = e.getY();
-				// After RuneLite's own handler, which may already be showing a menu for this tab.
-				SwingUtilities.invokeLater(() -> showTabMenu(tab, x, y));
-			}
+			safely("handle a sidebar click", () -> sidebarClicked(e));
 		}
 	};
 
-	private final ChangeListener changeListener = e ->
+	private void sidebarClicked(MouseEvent e)
+	{
+		if (sidebar == null)
+		{
+			return;
+		}
+		int index = sidebar.indexAtLocation(e.getX(), e.getY());
+		if (index < 0)
+		{
+			return;
+		}
+		Popout p = popoutAt(index);
+		if (SwingUtilities.isLeftMouseButton(e))
+		{
+			// Popped-out tabs are disabled; clicking one brings its window forward instead.
+			if (p != null)
+			{
+				p.window.bringToFront();
+			}
+		}
+		else if (SwingUtilities.isMiddleMouseButton(e))
+		{
+			// Middle-click toggles.
+			if (p != null)
+			{
+				dock(p, true, false);
+			}
+			else if (canPopOut(index))
+			{
+				popOut(index, null);
+			}
+		}
+		else if (SwingUtilities.isRightMouseButton(e))
+		{
+			Component tab = sidebar.getComponentAt(index);
+			int x = e.getX();
+			int y = e.getY();
+			// After RuneLite's own handler, which may already be showing a menu for this tab.
+			SwingUtilities.invokeLater(() -> safely("show the sidebar menu", () -> showTabMenu(tab, x, y)));
+		}
+	}
+
+	private final ChangeListener changeListener = e -> safely("handle a sidebar selection", () ->
 	{
 		if (sidebar == null)
 		{
@@ -576,7 +672,7 @@ class PopoutManager
 			// Something selected a popped-out tab (a plugin opening its own panel, the sidebar
 			// hotkey). Undo it after RuneLite has processed the selection, then reactivate the
 			// panel, which RuneLite deactivates when the selection moves away.
-			SwingUtilities.invokeLater(() ->
+			SwingUtilities.invokeLater(() -> safely("deselect a popped-out tab", () ->
 			{
 				if (sidebar != null && sidebar.getSelectedIndex() >= 0 && sidebar.getSelectedComponent() == p.placeholder)
 				{
@@ -586,9 +682,9 @@ class PopoutManager
 				{
 					SwingUtil.activate(ClientSidebar.findPluginPanel(p.content));
 				}
-			});
+			}));
 		}
-	};
+	});
 
 	private final ContainerListener containerListener = new ContainerListener()
 	{
@@ -600,11 +696,11 @@ class PopoutManager
 				return;
 			}
 			// A plugin added a panel. Let RuneLite finish adding it before touching it.
-			SwingUtilities.invokeLater(() ->
+			SwingUtilities.invokeLater(() -> safely("restore a popout", () ->
 			{
 				restoreRemembered();
 				fireChanged();
-			});
+			}));
 		}
 
 		@Override
@@ -619,7 +715,7 @@ class PopoutManager
 				Popout p = byPlaceholder(e.getChild());
 				if (p != null)
 				{
-					orphaned(p);
+					safely("close a removed panel's window", () -> orphaned(p));
 				}
 			}
 			else
@@ -628,6 +724,67 @@ class PopoutManager
 			}
 		}
 	};
+
+	/**
+	 * Follows RuneLite being minimised and restored, if enabled. Only our own windows change.
+	 */
+	private final WindowStateListener clientStateListener = e -> safely("follow RuneLite minimising", () -> clientStateChanged(e));
+
+	private void clientStateChanged(WindowEvent e)
+	{
+		boolean wasMinimized = (e.getOldState() & Frame.ICONIFIED) != 0;
+		boolean isMinimized = (e.getNewState() & Frame.ICONIFIED) != 0;
+		if (!config.minimizeWithClient() || wasMinimized == isMinimized)
+		{
+			return;
+		}
+		for (Popout p : popouts)
+		{
+			if (isMinimized && (p.window.getExtendedState() & Frame.ICONIFIED) == 0)
+			{
+				p.minimizedWithClient = true;
+				p.window.minimize();
+			}
+			else if (!isMinimized && p.minimizedWithClient)
+			{
+				p.minimizedWithClient = false;
+				p.window.restoreWithoutFocus();
+			}
+		}
+	}
+
+	/**
+	 * Runs a UI action; if it throws, puts every panel back in the sidebar so a bug here can
+	 * never leave the sidebar in a broken state.
+	 */
+	private void safely(String what, Runnable action)
+	{
+		try
+		{
+			action.run();
+		}
+		catch (RuntimeException e)
+		{
+			log.warn("Panel Popout failed to {}; putting all panels back in the sidebar", what, e);
+			restoreAllQuietly();
+		}
+	}
+
+	private void restoreAllQuietly()
+	{
+		for (Popout p : new ArrayList<>(popouts))
+		{
+			try
+			{
+				dock(p, false, false);
+			}
+			catch (RuntimeException e)
+			{
+				log.warn("Couldn't put {} back in the sidebar", p.name, e);
+				popouts.remove(p);
+			}
+		}
+	}
 
 	private void showTabMenu(Component tab, int x, int y)
 	{
@@ -649,15 +806,20 @@ class PopoutManager
 		else
 		{
 			JMenuItem out = new JMenuItem("Pop out");
-			out.setEnabled(canPopOut(ClientSidebar.indexOfTab(sidebar, tab)));
-			out.addActionListener(ev ->
+			int index = ClientSidebar.indexOfTab(sidebar, tab);
+			out.setEnabled(canPopOut(index));
+			if (isProtected(tab, sidebar.getToolTipTextAt(index)))
 			{
-				int index = sidebar == null ? -1 : ClientSidebar.indexOfTab(sidebar, tab);
-				if (canPopOut(index))
+				out.setToolTipText("Configuration stays in the sidebar so settings are always reachable");
+			}
+			out.addActionListener(ev -> safely("pop out a panel", () ->
+			{
+				int now = sidebar == null ? -1 : ClientSidebar.indexOfTab(sidebar, tab);
+				if (canPopOut(now))
 				{
-					popOut(index, null);
+					popOut(now, null);
 				}
-			});
+			}));
 			items.add(out);
 		}
 
@@ -696,13 +858,13 @@ class PopoutManager
 		SwingUtil.removeButtonDecorations(b);
 		b.setFocusable(false);
 		b.setPreferredSize(new Dimension(26, 26));
-		b.addActionListener(e ->
+		b.addActionListener(e -> safely("pop out the open panel", () ->
 		{
 			if (sidebar != null && canPopOut(sidebar.getSelectedIndex()))
 			{
 				popOut(sidebar.getSelectedIndex(), null);
 			}
-		});
+		}));
 		return b;
 	}
 
@@ -725,7 +887,17 @@ class PopoutManager
 			return false;
 		}
 		Component c = sidebar.getComponentAt(index);
-		return c != null && !(c instanceof PopoutPlaceholder) && sidebar.getToolTipTextAt(index) != null;
+		String name = sidebar.getToolTipTextAt(index);
+		return c != null && name != null && !(c instanceof PopoutPlaceholder) && !isProtected(c, name);
+	}
+
+	/**
+	 * Panels that must stay in the sidebar, so plugin settings (including turning this plugin off)
+	 * are always reachable even if something goes wrong with a popout window.
+	 */
+	private static boolean isProtected(Component tabComponent, @Nullable String name)
+	{
+		return CONFIG_PANEL_CLASS.equals(tabComponent.getClass().getName()) || CONFIG_PANEL_NAME.equals(name);
 	}
 
 	@Nullable

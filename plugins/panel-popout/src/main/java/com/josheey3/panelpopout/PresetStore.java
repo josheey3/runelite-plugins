@@ -80,6 +80,26 @@ class PresetStore
 	}
 
 	/**
+	 * Moves a preset up (-1) or down (+1). Order matters: preset hotkeys follow it.
+	 */
+	void move(Preset preset, int delta)
+	{
+		int from = presets.indexOf(preset);
+		int to = from + delta;
+		if (from < 0 || to < 0 || to >= presets.size())
+		{
+			return;
+		}
+		Collections.swap(presets, from, to);
+		save();
+	}
+
+	int indexOf(Preset preset)
+	{
+		return presets.indexOf(preset);
+	}
+
+	/**
 	 * Persist after changing a preset in place.
 	 */
 	void save()

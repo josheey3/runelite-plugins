@@ -28,6 +28,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
+import net.runelite.client.config.Keybind;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
@@ -43,6 +44,7 @@ class PanelPopoutPanel extends PluginPanel
 
 	private final PopoutManager popouts;
 	private final PresetStore presets;
+	private final PanelPopoutConfig config;
 
 	/**
 	 * Preset being edited, or null for the main view.
@@ -54,10 +56,11 @@ class PanelPopoutPanel extends PluginPanel
 	private boolean rebuildQueued;
 
 	@Inject
-	PanelPopoutPanel(PopoutManager popouts, PresetStore presets)
+	PanelPopoutPanel(PopoutManager popouts, PresetStore presets, PanelPopoutConfig config)
 	{
 		this.popouts = popouts;
 		this.presets = presets;
+		this.config = config;
 		rebuild();
 	}
 
@@ -108,7 +111,7 @@ class PanelPopoutPanel extends PluginPanel
 		add(section("Open windows"));
 		if (open.isEmpty())
 		{
-			add(muted("Nothing is popped out. Right-click any sidebar icon and choose \"Pop out\", or use the button at the top of the icon strip."));
+			add(muted("Nothing is popped out. Right-click (or middle-click) any sidebar icon, or use the button at the top of the icon strip."));
 		}
 		else
 		{
@@ -116,8 +119,19 @@ class PanelPopoutPanel extends PluginPanel
 			{
 				add(windowRow(s.getName()));
 			}
-			add(button("Pop all back in", popouts::popInAll));
 		}
+		JPanel windowButtons = new JPanel(new GridLayout(1, open.isEmpty() ? 1 : 2, 6, 0));
+		windowButtons.setOpaque(false);
+		JButton popOutMenu = new JButton("Pop out...");
+		popOutMenu.setFocusable(false);
+		popOutMenu.setToolTipText("Pick a sidebar panel to pop out");
+		popOutMenu.addActionListener(e -> popOutMenu().show(popOutMenu, 0, popOutMenu.getHeight()));
+		windowButtons.add(popOutMenu);
+		if (!open.isEmpty())
+		{
+			windowButtons.add(button("Pop all in", popouts::popInAll));
+		}
+		add(windowButtons);
 
 		add(section("Presets"));
 		JButton save = button("Save open windows as preset", this::createPreset);
@@ -130,9 +144,11 @@ class PanelPopoutPanel extends PluginPanel
 		{
 			add(muted("A preset opens a set of panels in saved positions and closes all other popouts. Arrange some windows, then save them."));
 		}
-		for (Preset p : presets.all())
+		List<Preset> all = presets.all();
+		for (int i = 0; i < all.size(); i++)
 		{
-			add(presetRow(p, !openNames.isEmpty() && openNames.equals(names(p))));
+			Preset p = all.get(i);
+			add(presetRow(p, i, !openNames.isEmpty() && openNames.equals(names(p))));
 		}
 
 		if (!status.isEmpty())
@@ -152,7 +168,7 @@ class PanelPopoutPanel extends PluginPanel
 		return row;
 	}
 
-	private JPanel presetRow(Preset preset, boolean active)
+	private JPanel presetRow(Preset preset, int position, boolean active)
 	{
 		JPanel row = row();
 		if (active)
@@ -165,6 +181,11 @@ class PanelPopoutPanel extends PluginPanel
 		String summary = preset.getPanels().isEmpty()
 			? "No panels"
 			: preset.getPanels().stream().map(PopoutState::getName).collect(Collectors.joining(", "));
+		Keybind hotkey = PanelPopoutPlugin.presetHotkey(config, position);
+		if (!Keybind.NOT_SET.equals(hotkey))
+		{
+			summary = hotkey + " · " + summary;
+		}
 		JPanel text = new JPanel(new GridLayout(2, 1));
 		text.setOpaque(false);
 		text.add(ellipsized(preset.getName(), Color.WHITE));
@@ -219,6 +240,24 @@ class PanelPopoutPanel extends PluginPanel
 		});
 		menu.add(rename);
 
+		int index = presets.indexOf(preset);
+		JMenuItem up = new JMenuItem("Move up");
+		up.setEnabled(index > 0);
+		up.addActionListener(e ->
+		{
+			presets.move(preset, -1);
+			rebuild();
+		});
+		menu.add(up);
+		JMenuItem down = new JMenuItem("Move down");
+		down.setEnabled(index >= 0 && index < presets.all().size() - 1);
+		down.addActionListener(e ->
+		{
+			presets.move(preset, 1);
+			rebuild();
+		});
+		menu.add(down);
+
 		menu.addSeparator();
 		JMenuItem delete = new JMenuItem("Delete");
 		delete.addActionListener(e ->
@@ -232,6 +271,25 @@ class PanelPopoutPanel extends PluginPanel
 			}
 		});
 		menu.add(delete);
+		return menu;
+	}
+
+	private JPopupMenu popOutMenu()
+	{
+		JPopupMenu menu = new JPopupMenu();
+		List<String> names = popouts.poppableNames();
+		if (names.isEmpty())
+		{
+			JMenuItem none = new JMenuItem("No panels available");
+			none.setEnabled(false);
+			menu.add(none);
+		}
+		for (String name : names)
+		{
+			JMenuItem item = new JMenuItem(name);
+			item.addActionListener(e -> popouts.popOut(name));
+			menu.add(item);
+		}
 		return menu;
 	}
 

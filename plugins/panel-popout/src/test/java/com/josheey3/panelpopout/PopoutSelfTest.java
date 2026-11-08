@@ -60,7 +60,10 @@ class PopoutSelfTest
 		steps.add(this::startNotesPlugin);
 		steps.add(this::checkRepopped);
 		steps.add(this::rightClickMenu);
+		steps.add(this::configurationProtected);
+		steps.add(this::middleClickToggles);
 		steps.add(this::applyPreset);
+		steps.add(this::presetHotkeyPath);
 		steps.add(this::restartSelf);
 		steps.add(this::checkRestored);
 		steps.add(this::popInAll);
@@ -218,6 +221,58 @@ class PopoutSelfTest
 		}
 		check(hasPopOut, "right-click menu offers Pop out");
 		MenuSelectionManager.defaultManager().clearSelectedPath();
+		next();
+	}
+
+	private void configurationProtected()
+	{
+		check(!manager.poppableNames().contains("Configuration"), "Configuration not offered for pop out");
+		manager.popOut("Configuration");
+		check(!manager.isPoppedOut("Configuration") && indexOf("Configuration") >= 0, "Configuration can't be popped out");
+		next();
+	}
+
+	private void middleClickToggles()
+	{
+		int i = indexOf(OTHER);
+		Rectangle r = sidebar.getBoundsAt(i);
+		MouseEvent click = new MouseEvent(sidebar, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+			r.x + r.width / 2, r.y + r.height / 2, 1, false, MouseEvent.BUTTON2);
+		sidebar.dispatchEvent(click);
+		check(manager.isPoppedOut(OTHER), "middle-click pops out " + OTHER);
+		r = sidebar.getBoundsAt(indexOf(OTHER + " (popped out)"));
+		sidebar.dispatchEvent(new MouseEvent(sidebar, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+			r.x + r.width / 2, r.y + r.height / 2, 1, false, MouseEvent.BUTTON2));
+		check(!manager.isPoppedOut(OTHER), "middle-click pops " + OTHER + " back in");
+		next();
+	}
+
+	/**
+	 * Hotkeys call PanelPopoutPlugin.openPreset(index); exercise that path with a temporary
+	 * preset moved to the top, then remove it again (restores the user's preset order).
+	 */
+	private void presetHotkeyPath()
+	{
+		PanelPopoutPlugin self = (PanelPopoutPlugin) plugin(PanelPopoutPlugin.class);
+		PresetStore store = self.getInjector().getInstance(PresetStore.class);
+		Preset temp = new Preset("Self-test " + System.nanoTime(), new ArrayList<>(List.of(new PopoutState(UNWRAPPED, null, false))));
+		store.add(temp);
+		while (store.indexOf(temp) > 0)
+		{
+			store.move(temp, -1);
+		}
+		self.openPreset(0);
+		Set<String> open = new HashSet<>();
+		manager.openPopouts().forEach(s -> open.add(s.getName()));
+		check(open.equals(Set.of(UNWRAPPED)), "preset at position 1 opened via hotkey path, got " + open);
+		store.remove(temp);
+		check(store.byName(temp.getName()) == null, "temporary preset removed");
+		manager.popInAll();
+		// Put the earlier preset layout back for the restart check.
+		List<PopoutState> layout = new ArrayList<>();
+		layout.add(new PopoutState(WRAPPED, null, false));
+		layout.add(new PopoutState(OTHER, null, true));
+		manager.applyLayout(layout);
 		next();
 	}
 

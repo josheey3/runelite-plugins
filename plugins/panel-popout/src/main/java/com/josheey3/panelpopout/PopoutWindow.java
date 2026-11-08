@@ -1,7 +1,7 @@
 package com.josheey3.panelpopout;
 
 import com.formdev.flatlaf.FlatClientProperties;
-import com.formdev.flatlaf.ui.FlatNativeWindowBorder;
+import com.formdev.flatlaf.FlatLaf;
 import com.josheey3.core.ui.Icons;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -25,6 +25,7 @@ import javax.swing.JFrame;
 import javax.swing.JMenuBar;
 import javax.swing.JPanel;
 import javax.swing.JToggleButton;
+import javax.swing.Timer;
 import javax.swing.WindowConstants;
 import net.runelite.client.ui.ClientUI;
 import net.runelite.client.ui.ColorScheme;
@@ -62,7 +63,7 @@ class PopoutWindow extends JFrame
 		icons.add(ClientUI.ICON_128);
 		setIconImages(icons);
 
-		if (FlatNativeWindowBorder.isSupported())
+		if (FlatLaf.supportsNativeWindowDecorations())
 		{
 			getRootPane().putClientProperty(FlatClientProperties.USE_WINDOW_DECORATIONS, true);
 		}
@@ -156,7 +157,7 @@ class PopoutWindow extends JFrame
 	}
 
 	/**
-	 * Restores, raises and focuses the window. Only call when the user asks for it.
+	 * Restores and raises the window. Only call when the user asks for it (a click).
 	 */
 	void bringToFront()
 	{
@@ -166,7 +167,23 @@ class PopoutWindow extends JFrame
 		}
 		setVisible(true);
 		toFront();
-		requestFocus();
+	}
+
+	void minimize()
+	{
+		setExtendedState(getExtendedState() | Frame.ICONIFIED);
+	}
+
+	/**
+	 * Restores a minimised window without letting it take keyboard focus from the game.
+	 */
+	void restoreWithoutFocus()
+	{
+		setFocusableWindowState(false);
+		setExtendedState(getExtendedState() & ~Frame.ICONIFIED);
+		Timer refocusable = new Timer(250, e -> setFocusableWindowState(true));
+		refocusable.setRepeats(false);
+		refocusable.start();
 	}
 
 	private void boundsChanged(Runnable onChanged)
