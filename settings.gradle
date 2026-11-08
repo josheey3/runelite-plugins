@@ -3,6 +3,9 @@ rootProject.name = 'runelite-plugins'
 // Shared library code used by plugins (bundled into each plugin jar).
 include 'core'
 
+// `./gradlew runClient`: RuneLite with every plugin below loaded (see dev-client/build.gradle).
+include 'dev-client'
+
 // Every folder under plugins/ with a build.gradle is a subproject named after the folder,
 // e.g. plugins/panel-popout -> :panel-popout. No need to edit this file when adding plugins.
 file('plugins').eachDir { dir ->

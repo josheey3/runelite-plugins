@@ -90,3 +90,10 @@ configure(subprojects.findAll { it.projectDir.parentFile.name == 'plugins' }) {
 		archiveFileName.set("${project.name}-all.jar")
 	}
 }
+
+// RuneLite with every plugin in plugins/ loaded, for everyday use: ./gradlew runClient
+tasks.register('runClient') {
+	group = 'application'
+	description = 'Launches RuneLite with every plugin in plugins/ loaded (see dev-client/build.gradle).'
+	dependsOn ':dev-client:run'
+}
